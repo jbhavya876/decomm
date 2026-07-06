@@ -1,0 +1,27 @@
+# Rust / Cargo
+/target/
+/host/target/
+/methods/target/
+**/*.rs.bk
+Cargo.lock
+
+# RISC Zero
+/methods/guest/target/
+
+# Node / Anchor / Solana
+node_modules/
+.anchor/
+test-ledger/
+yarn.lock
+package-lock.json
+
+# Environment & Secrets (CRITICAL)
+.env
+*.json
+!tsconfig.json
+!package.json
+!Anchor.toml
+
+# OS Files
+.DS_Store
+Thumbs.db
