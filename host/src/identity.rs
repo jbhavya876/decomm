@@ -9,7 +9,8 @@ pub struct NodeIdentity {
     pub peer_id: PeerId,
     pub pqc_public_key: PublicKey,
     pub pqc_secret_key: SecretKey,
-    pub active_session_key: Arc<Mutex<Option<[u8; 32]>>>, 
+    pub active_session_key: Arc<Mutex<Option<[u8; 32]>>>,
+    pub anchored_root: Arc<Mutex<Option<[u8; 32]>>>,
 }
 
 impl NodeIdentity {
@@ -27,7 +28,8 @@ impl NodeIdentity {
             peer_id,
             pqc_public_key,
             pqc_secret_key,
-            active_session_key: Arc::new(Mutex::new(None)), 
+            active_session_key: Arc::new(Mutex::new(None)),
+            anchored_root: Arc::new(Mutex::new(None)),
         }
     }
 }

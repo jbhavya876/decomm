@@ -2,6 +2,7 @@
 /target/
 /host/target/
 /methods/target/
+/alterblock_contracts/target/
 **/*.rs.bk
 Cargo.lock
 
@@ -21,6 +22,8 @@ package-lock.json
 !tsconfig.json
 !package.json
 !Anchor.toml
+.keystore
+*.key
 
 # OS Files
 .DS_Store
