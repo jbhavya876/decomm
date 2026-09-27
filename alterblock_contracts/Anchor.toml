@@ -5,15 +5,19 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
+[programs.localnet]
+alterblock_contracts = "BG3beAeCStRxXspt2NbyrfgWR6HTq4BwvfhaEPmWQop8"
+
 [programs.devnet]
-alterblock_contracts = "8P5tdCSpXPev51dhXRX7w7U7GvFSTc7Jfbt3c6UxyMhG"
+alterblock_contracts = "BG3beAeCStRxXspt2NbyrfgWR6HTq4BwvfhaEPmWQop8"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
+
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""

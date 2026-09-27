@@ -4,3 +4,21 @@ members = [
     "methods"
 ]
 resolver = "2"
+
+[profile.dev]
+# debug=1 reduces debuginfo size vs default debug=2, saving memory and disk
+debug = 1
+
+# Optimize ZK prover engines for fast STARK proof generation (seconds vs 30+ mins in debug)
+[profile.dev.package.risc0-zkvm]
+opt-level = 3
+
+[profile.dev.package.risc0-zkp]
+opt-level = 3
+
+[profile.dev.package.risc0-circuit-rv32im]
+opt-level = 3
+
+
+
+

@@ -4,27 +4,51 @@
 /methods/target/
 /alterblock_contracts/target/
 **/*.rs.bk
-Cargo.lock
+
+# Cargo.lock files are committed for reproducible builds & cargo audit verification:
+# - Cargo.lock (workspace root)
+# - alterblock_contracts/Cargo.lock
+# - methods/guest/Cargo.lock
 
 # RISC Zero
 /methods/guest/target/
+.risc0/
 
 # Node / Anchor / Solana
 node_modules/
 .anchor/
 test-ledger/
-yarn.lock
-package-lock.json
+yarn-error.log*
+npm-debug.log*
 
-# Environment & Secrets (CRITICAL)
+# Environment, Wallets & Private Secrets (CRITICAL)
 .env
+.env.*
+*.key
+*.keystore
+*keypair*.json
+*id.json
+*.pem
+
+# Preserve project configuration JSON files
 *.json
 !tsconfig.json
 !package.json
 !Anchor.toml
-.keystore
-*.key
 
-# OS Files
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# Logs & Temporary Files
+*.log
+/tmp/
+
+# OS Artifacts
 .DS_Store
 Thumbs.db
+desktop.ini

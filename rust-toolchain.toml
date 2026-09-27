@@ -1,0 +1,4 @@
+[toolchain]
+# Minimum required: rustc 1.89 (needed by solana-sdk 4.0.1 transitive deps).
+# Run `rustup update stable` to get the latest stable toolchain.
+channel = "stable"

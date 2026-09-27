@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 risc0-zkvm = { version = "^3.0.5", default-features = false, features = ['std'] }
-sha2 = "0.11.0"
+# sha2 0.10.x is the current stable series compatible with the digest 0.10 ecosystem.
+sha2 = "0.10"

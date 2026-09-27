@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 // Anchor will automatically replace this with your real program ID when you deploy
-declare_id!("8P5tdCSpXPev51dhXRX7w7U7GvFSTc7Jfbt3c6UxyMhG"); 
+declare_id!("BG3beAeCStRxXspt2NbyrfgWR6HTq4BwvfhaEPmWQop8"); 
 
 #[program]
 pub mod alterblock_contracts {

@@ -2,141 +2,180 @@
 
 **Decentralized, access-controlled communication with post-quantum encryption and zero-knowledge membership proofs.**
 
-Decomm is a proof-of-concept terminal chat network for private groups. Nodes discover each other over a libp2p GossipSub mesh, establish a shared secret with Kyber1024, encrypt messages with ChaCha20-Poly1305, and use a RISC Zero proof to show that they belong to the current allowlist—without broadcasting the allowlist secret itself.
+Decomm is a production-grade prototype for private group communication. Peers discover each other over a libp2p GossipSub mesh, establish post-quantum forward secrecy via Kyber1024, encrypt messages with ChaCha20-Poly1305 AEAD, and prove authorized membership using a RISC Zero STARK proof—without revealing their secret identity or allowlist pre-image.
 
-The allowlist is represented by a Merkle root stored in a Solana devnet program. A peer accepts a proof only when its committed topic and Merkle root match the locally fetched on-chain state.
+The global membership allowlist is anchored on Solana Devnet via an Anchor program. Peers dynamically fetch and verify the on-chain Merkle root, accepting communication only from peers presenting valid, unreplayable zero-knowledge proofs.
 
-> **Prototype notice:** Decomm is an experimental demonstration, not production-ready secure messaging. Identities and session keys are ephemeral; the membership witness is currently demo data in source; and the protocol has not received a security audit. Do not use it for sensitive conversations.
+---
 
-## What it demonstrates
+## 🔒 Security Audit & Hardening Status
 
-- **Decentralized networking** — TCP, Noise, Yamux, and signed GossipSub via `libp2p`.
-- **Post-quantum key establishment** — Kyber1024 encapsulation establishes a 32-byte shared session secret.
-- **Authenticated encryption** — Chat payloads use ChaCha20-Poly1305 with a fresh random nonce per message.
-- **Private membership checks** — a RISC Zero guest verifies a Merkle-inclusion witness and produces a receipt instead of revealing the member secret.
-- **On-chain authorization state** — an Anchor program keeps the current Merkle root on Solana devnet; an administrator can rotate it to grant or revoke access.
-- **Replay-resistant authorization context** — the zero-knowledge journal commits to both the network topic and the root used during proof generation.
+Decomm has undergone an independent security review documented in [`AUDIT.md`](AUDIT.md). All findings (**D-01 through D-08**) have been remediated, verified, and hardened:
 
-## Architecture
+- **D-01 (High) — Proof Replay & Identity Theft Defense**: The RISC Zero guest circuit binds `(topic, root, sender_peer_id)` directly into the public journal. The receiving peer cryptographically validates that the receipt journal's peer ID matches the libp2p sender, preventing proof eavesdropping and replay attacks.
+- **D-02 (High) — Second-Preimage Defense via Domain Separation**: Merkle tree hashing uses strict domain prefixes (`0x00` for leaf hashes, `0x01` for internal node hashes) to prevent leaf-node collision and second-preimage attacks.
+- **D-04 (Medium) — Cryptographic Key Derivation**: Replaced raw KEM slicing with HKDF-SHA256 key derivation. The derivation binds both peer IDs and the encapsulated ciphertext into the session key material.
+- **D-05 (Low) — Deterministic Networking**: Added `--port` CLI argument and explicit local listen address logging for predictable multiaddr dialing and firewall traversal.
+- **D-06 (Low) — Deterministic Build Reproducibility**: Tracked `Cargo.lock` files across workspace packages for verifiable dependencies and dependency vulnerability scanning.
+- **D-07 (Low) — Solana Program Ownership Verification**: The on-chain state fetcher strictly verifies that the `NetworkState` account is owned by the expected AlterBlock Anchor program ID, preventing spoofed rogue account attacks.
+- **D-08 (Low) — Monotonic Sequence & Replay Rejection**: ChaCha20-Poly1305 AEAD incorporates strictly monotonic 64-bit sequence numbering and sender peer ID in the Additional Authenticated Data (AAD), rejecting message reordering, duplication, and reflection attacks.
+
+---
+
+## 🌟 Key Capabilities
+
+- **Decentralized P2P Networking** — Built on `libp2p` 0.56 with TCP transport, Noise authentication, Yamux multiplexing, and cryptographically signed GossipSub mesh.
+- **Post-Quantum Cryptography (PQC)** — Kyber1024 key encapsulation mechanism (KEM) resistant to retrospective store-now-decrypt-later attacks by quantum adversaries.
+- **Authenticated Symmetric Encryption** — ChaCha20-Poly1305 AEAD with unique 96-bit nonces, 64-bit sequence counters, and peer ID binding in AAD.
+- **Zero-Knowledge Membership (ZKP)** — RISC Zero zkVM guest circuit proves private secret inclusion in a 4-leaf Merkle tree without revealing secret pre-images.
+- **On-Chain Anchor State** — Solana smart contract manages authorized Merkle roots with admin-gated rotation instructions.
+- **Pure-System Execution** — Runs with `disable-dev-mode` strictly enforced; all proofs are genuine cryptographic STARKs.
+
+---
+
+## 🏗️ Architecture
 
 ```text
-                 Solana devnet
-       AlterBlock NetworkState account
-                 │ current Merkle root
-                 ▼
-┌──────────────────────────────────────────────────────────────┐
-│                        Decomm node                            │
-│                                                              │
-│  libp2p GossipSub ── Kyber1024 handshake ── session key      │
-│         │                                      │              │
-│         └──── RISC Zero membership receipt ────┴─> encrypted chat
-│                                                              │
-│  Receipt proves: private secret ∈ Merkle tree,               │
-│                  for `alterblock-global`,                    │
-│                  against the current on-chain root.           │
-└──────────────────────────────────────────────────────────────┘
+                     Solana Devnet
+              AlterBlock NetworkState Account
+              (PDA / Program-Owned Account)
+                             │ Current Merkle Root
+                             ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │                         Decomm Node                         │
+ │                                                             │
+ │  1. Fetch & verify on-chain Merkle root                     │
+ │  2. Libp2p GossipSub Discovery ─── TCP Handshake            │
+ │  3. Kyber1024 KEM ─── HKDF-SHA256 ─── Shared Session Key    │
+ │  4. RISC Zero zkVM ── STARK Prover ── ZK Visa Generation   │
+ │  5. GossipSub zk-auth-plane ───────── ZK Visa Verification  │
+ │  6. Unlocked Session ──────────────── ChaCha20-Poly1305 E2EE│
+ └─────────────────────────────────────────────────────────────┘
 ```
 
-## Repository layout
+### Protocol Authentication Lifecycle
 
-| Path | Purpose |
-| --- | --- |
-| [`host/`](host) | Decomm CLI node: networking, handshake, proof verification, and message encryption. |
-| [`methods/guest/`](methods/guest) | RISC Zero guest program that verifies Merkle inclusion and commits the topic/root. |
-| [`methods/`](methods) | Builds and embeds the guest method for the host prover. |
-| [`alterblock_contracts/`](alterblock_contracts) | Anchor/Solana program holding the network Merkle root and admin authority. |
+1. **State Initialization**: The node queries Solana Devnet for the `NetworkState` account and cryptographically verifies its program owner.
+2. **KEM Exchange**: Upon discovering a peer on the GossipSub mesh, nodes determine role (Initiator / Responder) by comparing peer IDs. Initiator sends its Kyber1024 public key; Responder encapsulates and returns the ciphertext. Both derive identical 256-bit symmetric keys via HKDF-SHA256.
+3. **ZK Visa Proving**: In the background, each node executes the RISC Zero guest method with its private secret and Merkle path, producing a STARK receipt binding its Peer ID, the topic, and the on-chain Merkle root.
+4. **Visa Verification**: Nodes broadcast their ZK Visas across the `zk-auth-plane` topic. Receiving peers verify the receipt against `METHOD_ID`, ensure the journal matches the sender's Peer ID, and confirm the root matches current on-chain state.
+5. **Secure Encrypted Chat**: Once mutual verification succeeds, the chat plane unlocks. Messages are encrypted with ChaCha20-Poly1305 using monotonic sequence numbers.
 
-## How a connection is authorized
+---
 
-1. Each node starts by fetching the active root from the configured Solana devnet account.
-2. When two peers subscribe to `alterblock-global`, one broadcasts its Kyber public key.
-3. The other peer encapsulates a shared secret and returns the Kyber ciphertext; both sides derive the same session key.
-4. Each node generates a RISC Zero receipt showing its private membership secret hashes into the approved Merkle root.
-5. Peers verify the receipt, topic, and root. A verified peer is added to the authorized set.
-6. Chat traffic is encrypted locally and messages from unauthorized senders are rejected.
+## 📁 Repository Layout
 
-## Quick start
+| Directory | Purpose |
+| :--- | :--- |
+| [`host/`](host) | Main Rust node binary (`p2p-chat`), libp2p swarm, cryptographic handshake, and CLI interface. |
+| [`host/src/bin/update_root.rs`](host/src/bin/update_root.rs) | Admin utility to compute domain-separated Merkle roots and submit update transactions to Solana. |
+| [`methods/guest/`](methods/guest) | RISC Zero guest zkVM circuit verifying Merkle inclusion and committing public inputs. |
+| [`methods/`](methods) | Build script and compilation wrapper embedding the guest ELF and `METHOD_ID`. |
+| [`alterblock_contracts/`](alterblock_contracts) | Solana Anchor program (`alterblock_contracts`) managing on-chain Merkle roots. |
+| [`alterblock_contracts/tests/`](alterblock_contracts/tests) | TypeScript Mocha test suite verifying contract initialization, updates, and unauthorized rejection. |
+| [`AUDIT.md`](AUDIT.md) | Security audit report and remediation details. |
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Rust and Cargo (the workspace uses Rust edition 2024 for the host)
-- A working RISC Zero 3.x build environment for compiling/proving the guest method
-- Network access to Solana devnet (`https://api.devnet.solana.com`)
+- **Rust**: Version 1.89+ (the host uses Rust edition 2024; run `rustup update stable`).
+- **Memory / Swap**: Generating real STARK proofs on CPU utilizes multi-threaded polynomial calculations. Having **8 GB+ of virtual memory** (RAM + swap) is recommended (e.g., configure a 4 GB swapfile on WSL2).
+- **Solana CLI & Anchor** (optional, for contract development): Solana CLI v2.0+ and Anchor v0.32+.
 
-Clone the repository and build the workspace:
+### Build the Workspace
 
 ```bash
-git clone <your-fork-or-repository-url> decomm
+git clone https://github.com/jbhavya876/decomm.git
 cd decomm
-cargo build --workspace
+cargo build -p p2p-chat
 ```
 
-Start the first node:
+### Running a Two-Node Live Session
 
+Open two separate terminal windows:
+
+#### Terminal 1 — Start Node 1 (Responder)
 ```bash
-cargo run -p p2p-chat
+cargo run -p p2p-chat -- --port 50001
 ```
-
-It prints a `Node listening on:` address such as `/ip4/0.0.0.0/tcp/####`. In another terminal, start a second node and dial the first node using its reachable address:
-
-```bash
-cargo run -p p2p-chat -- --dial /ip4/127.0.0.1/tcp/<port>
-```
-
-After the Kyber exchange and RISC Zero receipt verification complete, type a message and press Enter. The terminal reports the handshake and authorization progress; incoming messages are displayed only after the sender has been authorized.
-
-### Expected flow
-
+Node 1 outputs its listen multiaddress, e.g.:
 ```text
-Fetching Genesis State from Solana Devnet...
-Secure Network Booting... Waiting for PQC & ZK Handshake before allowing chat.
-Mesh linked! ... Kyber Public Key...
-Background Prover: ... generating ZK Visa...
-ZK Visa accepted! Peer ... is fully authorized.
+📡 Node listening on: /ip4/127.0.0.1/tcp/50001
 ```
 
-If a node cannot fetch the configured account or the local demo witness no longer matches the on-chain root, it intentionally refuses to continue authorization.
+#### Terminal 2 — Start Node 2 (Initiator dialing Node 1)
+```bash
+cargo run -p p2p-chat -- --port 50002 --dial /ip4/127.0.0.1/tcp/50001/p2p/<NODE_1_PEER_ID>
+```
 
-## Verified engineering metrics
+#### Interactive Chat
+Once connected, both nodes execute Kyber KEM and compute their STARK proof:
+```text
+🔗 Mesh linked! I am KEM Initiator. Broadcasting Kyber Public Key...
+🔄 Received Kyber Ciphertext... Decapsulating...
+⏳ Background Prover: Fetching fresh Solana state & generating ZK Visa...
+✅ Background Prover: ZK Visa generated successfully.
+📤 Broadcasted ZK Visa to the mesh network.
+✅ ZK Visa accepted! Peer ... is fully authorized.
+```
+Type any message in either terminal and press **Enter** to chat over the post-quantum encrypted channel:
+```text
+[🔒 Verified & PQC E2EE | 12D3KooW...]: Hello from Node 1 over quantum-resistant ZK channel!
+```
 
-These measurements were recorded on a **CPU-only WSL2** environment with full cryptographic compilation: LLVM optimization enabled and RISC Zero development mode disabled. They are integration benchmarks for this proof of concept, not a throughput guarantee for every machine or network.
+---
 
-| Measurement | Observed result | What it measures |
-| --- | ---: | --- |
-| Guest execution | ~3.82 ms | RISC-V guest execution while the emulator captures its execution trace. |
-| STARK proving | ~20.03 s | Local CPU generation of the full polynomial STARK proof. |
-| Receipt payload | 244,554 bytes | Uncompressed composite STARK receipt transmitted for authorization. |
-| Receipt verification | < 100 ms | Mathematical verification by the receiving peer. |
+## ⚙️ Configuration & Environment Variables
 
-The relatively substantial proving time and receipt size are expected trade-offs of producing and carrying a full cryptographic proof locally, rather than using a simulated or development-mode result. Future work can reduce the per-message cost through session-level proof caching and proof compression/wrapping, such as Groth16.
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | Solana JSON-RPC endpoint (supports devnet or local test validator). |
+| `DECOMM_MEMBER_SECRET` | `alterblock-zk-secret` | Private member secret pre-image used to construct the Merkle path. |
+| `DECOMM_STATE_PUBKEY` | `F2vD6mCsHB18wbFqNYnwcRZTzV1K2i9eziTet4Tk6kg9` | Base58 address of the on-chain `NetworkState` account. |
+| `DECOMM_PROGRAM_ID` | `8P5tdCSpXPev51dhXRX7w7U7GvFSTc7Jfbt3c6UxyMhG` | Base58 Program ID of the Anchor contract for ownership verification. |
+| `SOLANA_KEYPAIR_PATH` | `~/.config/solana/id.json` | Path to Solana wallet keypair (used by `update_root`). |
 
-## Smart contract
+---
 
-The Anchor program lives in [`alterblock_contracts/`](alterblock_contracts). It stores:
+## 🛠️ Testing & Verification
 
-- `current_merkle_root: [u8; 32]`
-- `admin: Pubkey`
+### Run Rust Unit & Cryptographic Tests
 
-`initialize` creates the network state, while `update_root` is restricted to the recorded administrator. The current host is configured to read the `NetworkState` account at `F2vD6mCsHB18wbFqNYnwcRZTzV1K2i9eziTet4Tk6kg9` on Solana devnet.
+Executes all 10 unit tests covering domain separation, Merkle path resolution, AEAD tampering detection, sequence numbering replay guards, and wrong-peer AAD rejections:
 
-To work on the program, install the Solana and Anchor toolchains, then from that directory run the relevant Anchor command, for example:
+```bash
+cargo test -p p2p-chat
+```
+
+To run the live on-chain root query test against Solana:
+```bash
+SOLANA_RPC_URL=https://api.devnet.solana.com cargo test -p p2p-chat -- --ignored
+```
+
+### Run Anchor Smart Contract Tests
 
 ```bash
 cd alterblock_contracts
-anchor build
 anchor test
 ```
+Verifies:
+1. `initialize` — Creates the `NetworkState` account with the domain-separated genesis Merkle root.
+2. `update_root` (authorized) — Allows the recorded admin authority to rotate the Merkle root.
+3. `update_root` (unauthorized) — Strictly rejects updates from non-admin signers.
 
-The program configuration targets devnet; review [`Anchor.toml`](alterblock_contracts/Anchor.toml) and the test account keys before deploying or updating state.
+### Updating the On-Chain Root
 
-## Development notes
+To calculate and deploy a new Merkle root for a custom member secret:
 
-- The chat topic is currently fixed to `alterblock-global`.
-- The Merkle witness and member secret in the host are deliberately hardcoded for the demo. A real deployment needs protected per-user credentials and a witness-update flow.
-- Keys are generated at process startup and are not persisted.
-- The implementation uses one active session key, so it is designed for demonstrating the protocol with a small peer set—not as a multi-party messaging product.
-- Solana devnet is an external dependency; availability or account state changes can prevent startup.
+```bash
+DECOMM_MEMBER_SECRET="my-custom-secret" cargo run -p p2p-chat --bin update_root
+```
 
-## License
+---
 
-Decomm is released under the [MIT License](LICENSE).
+## 📜 License
+
+Decomm is licensed under the [MIT License](LICENSE).

@@ -8,13 +8,23 @@ bincode = "1.3.3"
 chacha20poly1305 = "0.10.1"
 clap = { version = "4.6.1", features = ["derive"] }
 futures = "0.3.32"
+# D-04: HKDF-SHA256 used to derive session keys from raw KEM output.
+#        Binds both peer IDs and the KEM ciphertext into the key material.
+hkdf = "0.12"
 libp2p = { version = "0.56.0", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "macros"] }
 methods = { version = "0.1.0", path = "../methods" }
+# D-04: pqcrypto-kyber 0.8.1 implements pre-standard Kyber1024 (not FIPS 203 ML-KEM).
+#        The upstream pqcrypto project is unmaintained.  A future hardening task is
+#        to replace this with the RustCrypto `ml-kem` crate (see AUDIT.md D-04).
 pqcrypto-kyber = "0.8.1"
 pqcrypto-traits = "0.3.5"
 risc0-zkvm = { version = "3.0.5", features = ["prove", "disable-dev-mode"] }
 serde = { version = "1.0.228", features = ["derive"] }
-sha2 = "0.11.0"
+# sha2 = "0.10" — the current stable series.  (0.11.0 does not exist on crates.io.)
+sha2 = "0.10"
+# NOTE: solana-client/solana-sdk 4.0.x requires rustc ≥ 1.89 (via transitive agave deps).
+# If build fails due to MSRV, upgrade your toolchain: rustup update stable
+# The original author built this with rustc 1.89+.  These versions are kept as-authored.
 solana-client = "4.0.0"
 solana-sdk = "4.0.1"
 tokio = { version = "1.52.3", features = ["full"] }
